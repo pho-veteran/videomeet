@@ -19,7 +19,17 @@ export interface ChatMessage {
   socketId: string;
   nickname: string;
   message: string;
+  file?: ChatFile | null;
   timestamp: Date;
+}
+
+export interface ChatFile {
+  id: string;
+  url: string; // server-relative URL like /uploads/filename.ext
+  originalName: string;
+  mimeType: string;
+  size: number;
+  uploadedAt: Date;
 }
 
 export interface MediaStream {
@@ -73,11 +83,8 @@ export interface ClientToServerEvents {
   'join-room': (data: { roomId: string; nickname: string }) => void;
   'offer': (data: WebRTCOfferData) => void;
   'answer': (data: WebRTCAnswerData) => void;
-  'ice-candidate': (data: WebRTCCandidateData) => void;
-  'chat-message': (data: { message: string }) => void;
+  'chat-message': (data: { message: string; file?: ChatFile | null }) => void;
   'toggle-mute': (data: { isMuted: boolean }) => void;
-  'toggle-video': (data: { isVideoEnabled: boolean }) => void;
-  'audio-level': (data: { level: number }) => void;
 }
 
 export interface ServerToClientEvents {
@@ -86,11 +93,8 @@ export interface ServerToClientEvents {
   'user-left': (data: { socketId: string; nickname: string }) => void;
   'offer': (data: { offer: SimplePeerSignal; from: string }) => void;
   'answer': (data: { answer: SimplePeerSignal; from: string }) => void;
-  'ice-candidate': (data: { candidate: SimplePeerSignal; from: string }) => void;
   'chat-message': (data: ChatMessage) => void;
   'user-mute-changed': (data: { socketId: string; isMuted: boolean }) => void;
-  'user-video-changed': (data: { socketId: string; isVideoEnabled: boolean }) => void;
-  'audio-level': (data: { socketId: string; level: number }) => void;
   'error': (data: { message: string }) => void;
 }
 
@@ -101,7 +105,6 @@ export interface AppState {
   isHost: boolean;
   participants: User[];
   messages: ChatMessage[];
-  activeSpeaker: string | null;
   isChatOpen: boolean;
 }
 

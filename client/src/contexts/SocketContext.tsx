@@ -1,27 +1,20 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
-import { io, Socket } from 'socket.io-client';
-
-interface SocketContextType {
-  socket: Socket | null;
-  isConnected: boolean;
-  connect: () => void;
-  disconnect: () => void;
-}
-
-const SocketContext = createContext<SocketContextType | undefined>(undefined);
+import { io } from 'socket.io-client';
+import { SocketContext, type SocketContextType } from './socketContext';
 
 interface SocketProviderProps {
   children: ReactNode;
 }
 
 export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const [socket, setSocket] = useState<SocketContextType['socket']>(null);
   const [isConnected, setIsConnected] = useState(false);
 
-  const connect = () => {
+  const connect = useCallback(() => {
     if (!socket) {
-      const newSocket = io('http://localhost:3001', {
+      const serverUrl = (import.meta as unknown as { env?: { VITE_SERVER_URL?: string } }).env?.VITE_SERVER_URL || import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+      const newSocket = io(serverUrl, {
         transports: ['websocket'],
         autoConnect: true,
         reconnection: true,
@@ -65,15 +58,15 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
       setSocket(newSocket);
     }
-  };
+  }, [socket]);
 
-  const disconnect = () => {
+  const disconnect = useCallback(() => {
     if (socket) {
       socket.disconnect();
       setSocket(null);
       setIsConnected(false);
     }
-  };
+  }, [socket]);
 
   useEffect(() => {
     connect();
@@ -81,20 +74,12 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     return () => {
       disconnect();
     };
-  }, []);
+  }, [connect, disconnect]);
 
   return (
     <SocketContext.Provider value={{ socket, isConnected, connect, disconnect }}>
       {children}
     </SocketContext.Provider>
   );
-};
-
-export const useSocket = (): SocketContextType => {
-  const context = useContext(SocketContext);
-  if (context === undefined) {
-    throw new Error('useSocket must be used within a SocketProvider');
-  }
-  return context;
 };
 

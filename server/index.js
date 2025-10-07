@@ -3,12 +3,16 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const io = socketIo(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: CLIENT_ORIGIN,
     methods: ["GET", "POST"]
   }
 });
@@ -16,6 +20,35 @@ const io = socketIo(server, {
 // Middleware
 app.use(cors());
 app.use(express.json());
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+// Static serve for uploaded files
+app.use('/uploads', express.static(uploadsDir));
+
+// Configure multer storage
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    const ext = path.extname(file.originalname);
+    const base = path.basename(file.originalname, ext);
+    cb(null, `${base}-${uniqueSuffix}${ext}`);
+  }
+});
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 25 * 1024 * 1024 // 25MB
+  }
+});
+
+// Max upload size for socket uploads (should mirror multer limit)
+const MAX_SOCKET_UPLOAD_BYTES = 25 * 1024 * 1024; // 25MB
 
 // In-memory storage for rooms
 const rooms = new Map();
@@ -81,9 +114,38 @@ app.get('/api/room/:id', (req, res) => {
   });
 });
 
+// Upload endpoint scoped to room
+app.post('/api/rooms/:id/upload', upload.single('file'), (req, res) => {
+  try {
+    const roomId = (req.params.id || '').toUpperCase();
+    const room = rooms.get(roomId);
+    if (!room) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    const fileMeta = {
+      id: uuidv4(),
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      size: req.file.size,
+      url: `/uploads/${req.file.filename}`,
+      uploadedAt: new Date()
+    };
+    return res.json({ success: true, file: fileMeta });
+  } catch (e) {
+    console.error('File upload error', e);
+    return res.status(500).json({ error: 'Upload failed' });
+  }
+});
+
 // Socket.io connection handling
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
+
+  // Track ongoing socket uploads per socket
+  const ongoingUploads = new Map();
 
   // Join room
   socket.on('join-room', (data) => {
@@ -169,12 +231,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('ice-candidate', (data) => {
-    socket.to(data.roomId).emit('ice-candidate', {
-      candidate: data.candidate,
-      from: socket.id
-    });
-  });
+  // Removed 'ice-candidate' relay since trickle ICE is disabled
 
   // Chat messages
   socket.on('chat-message', (data) => {
@@ -185,11 +242,134 @@ io.on('connection', (socket) => {
         socketId: socket.id,
         nickname: socket.nickname,
         message: data.message,
+        file: data.file || null,
         timestamp: new Date()
       };
       
       room.messages.push(message);
       io.to(socket.roomId).emit('chat-message', message);
+    }
+  });
+
+  // Socket-based file uploads (chunked)
+  // Client flow: 'file-upload-start' -> many 'file-upload-chunk' -> 'file-upload-complete'
+  socket.on('file-upload-start', (data, ack) => {
+    try {
+      const { roomId, originalName, mimeType, size } = data || {};
+      const effectiveRoomId = (roomId || socket.roomId || '').toUpperCase();
+      const room = rooms.get(effectiveRoomId);
+      if (!room) {
+        if (ack) ack({ ok: false, error: 'Room not found' });
+        return;
+      }
+      if (typeof size !== 'number' || size <= 0) {
+        if (ack) ack({ ok: false, error: 'Invalid file size' });
+        return;
+      }
+      if (size > MAX_SOCKET_UPLOAD_BYTES) {
+        if (ack) ack({ ok: false, error: 'File too large' });
+        return;
+      }
+
+      const ext = path.extname(originalName || '');
+      const base = path.basename(originalName || 'upload', ext);
+      const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      const filename = `${base}-${uniqueSuffix}${ext || ''}`;
+      const filepath = path.join(uploadsDir, filename);
+
+      const writeStream = fs.createWriteStream(filepath);
+      const uploadId = uuidv4();
+      const state = {
+        uploadId,
+        filepath,
+        filename,
+        originalName: originalName || filename,
+        mimeType: mimeType || 'application/octet-stream',
+        size,
+        bytesReceived: 0,
+        closed: false,
+        writeStream
+      };
+      ongoingUploads.set(uploadId, state);
+
+      writeStream.on('error', (err) => {
+        console.error('Upload stream error', err);
+        try { fs.unlinkSync(filepath); } catch {}
+        ongoingUploads.delete(uploadId);
+        socket.emit('file-upload-error', { uploadId, error: 'Write failed' });
+      });
+
+      if (ack) ack({ ok: true, uploadId });
+    } catch (e) {
+      console.error('file-upload-start error', e);
+      if (ack) ack({ ok: false, error: 'Upload init failed' });
+    }
+  });
+
+  socket.on('file-upload-chunk', (data, ack) => {
+    try {
+      const { uploadId, chunk } = data || {};
+      const state = ongoingUploads.get(uploadId);
+      if (!state) {
+        if (ack) ack({ ok: false, error: 'Unknown uploadId' });
+        return;
+      }
+      if (state.closed) {
+        if (ack) ack({ ok: false, error: 'Upload already closed' });
+        return;
+      }
+      if (!chunk) {
+        if (ack) ack({ ok: false, error: 'Empty chunk' });
+        return;
+      }
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      state.bytesReceived += buffer.length;
+      if (state.bytesReceived > state.size || state.bytesReceived > MAX_SOCKET_UPLOAD_BYTES) {
+        try { state.writeStream.destroy(); } catch {}
+        try { fs.unlinkSync(state.filepath); } catch {}
+        ongoingUploads.delete(uploadId);
+        if (ack) ack({ ok: false, error: 'File exceeded declared size' });
+        return;
+      }
+      state.writeStream.write(buffer, (err) => {
+        if (err) {
+          console.error('Chunk write error', err);
+          if (ack) ack({ ok: false, error: 'Write failed' });
+        } else {
+          if (ack) ack({ ok: true, received: state.bytesReceived });
+        }
+      });
+    } catch (e) {
+      console.error('file-upload-chunk error', e);
+      if (ack) ack({ ok: false, error: 'Chunk failed' });
+    }
+  });
+
+  socket.on('file-upload-complete', (data, ack) => {
+    try {
+      const { uploadId } = data || {};
+      const state = ongoingUploads.get(uploadId);
+      if (!state) {
+        if (ack) ack({ ok: false, error: 'Unknown uploadId' });
+        return;
+      }
+      state.closed = true;
+      state.writeStream.end(() => {
+        ongoingUploads.delete(uploadId);
+
+        const fileMeta = {
+          id: uuidv4(),
+          originalName: state.originalName,
+          mimeType: state.mimeType,
+          size: state.bytesReceived,
+          url: `/uploads/${state.filename}`,
+          uploadedAt: new Date()
+        };
+        if (ack) ack({ ok: true, file: fileMeta });
+      });
+    } catch (e) {
+      console.error('file-upload-complete error', e);
+      if (ack) ack({ ok: false, error: 'Complete failed' });
     }
   });
 
@@ -205,29 +385,18 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('toggle-video', (data) => {
-    const room = rooms.get(socket.roomId);
-    if (room && room.participants.has(socket.id)) {
-      room.participants.get(socket.id).isVideoEnabled = data.isVideoEnabled;
-      socket.to(socket.roomId).emit('user-video-changed', {
-        socketId: socket.id,
-        isVideoEnabled: data.isVideoEnabled
-      });
-    }
-  });
-
-
-  // Audio level for active speaker detection
-  socket.on('audio-level', (data) => {
-    socket.to(socket.roomId).emit('audio-level', {
-      socketId: socket.id,
-      level: data.level
-    });
-  });
+  // Removed video toggle feature
 
   // Disconnect handling
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id, socket.nickname);
+
+    // Cleanup any ongoing uploads for this socket
+    ongoingUploads.forEach((state) => {
+      try { state.writeStream.destroy(); } catch {}
+      try { fs.unlinkSync(state.filepath); } catch {}
+    });
+    ongoingUploads.clear();
     
     if (socket.roomId) {
       const room = rooms.get(socket.roomId);

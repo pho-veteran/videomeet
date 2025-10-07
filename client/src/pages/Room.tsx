@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { Users, Crown, MessageCircle, AlertCircle, RefreshCw, Mic } from 'lucide-react';
-import { useSocket } from '../contexts/SocketContext';
+import { useSocket } from '../contexts/useSocket';
 import { useWebRTC } from '../hooks/useWebRTC';
 import VideoGrid from '../components/video/VideoGrid';
 import VideoControls from '../components/video/VideoControls';
 import ChatPanel from '../components/chat/ChatPanel';
-import type { User, ChatMessage } from '../types';
+import type { User, ChatMessage, ChatFile } from '../types';
 import toast from 'react-hot-toast';
 
 const Room: React.FC = () => {
@@ -20,7 +20,6 @@ const Room: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isHost, setIsHost] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [activeSpeaker, setActiveSpeaker] = useState<string | null>(null);
   const hasShownJoinToastRef = useRef(false);
   const hasInitializedRef = useRef(false);
 
@@ -119,24 +118,7 @@ const Room: React.FC = () => {
       );
     };
 
-    const handleUserVideoChanged = (data: { socketId: string; isVideoEnabled: boolean }) => {
-      setParticipants(prev => 
-        prev.map(p => 
-          p.socketId === data.socketId 
-            ? { ...p, isVideoEnabled: data.isVideoEnabled }
-            : p
-        )
-      );
-    };
-
-
-    const handleAudioLevel = (data: { socketId: string; level: number }) => {
-      if (data.level > 0.1) {
-        setActiveSpeaker(data.socketId);
-      } else if (activeSpeaker === data.socketId) {
-        setActiveSpeaker(null);
-      }
-    };
+    // Removed video-changed handler
 
     const handleError = (data: { message: string }) => {
       toast.error(data.message);
@@ -151,8 +133,7 @@ const Room: React.FC = () => {
     socket.on('user-left', handleUserLeft);
     socket.on('chat-message', handleChatMessage);
     socket.on('user-mute-changed', handleUserMuteChanged);
-    socket.on('user-video-changed', handleUserVideoChanged);
-    socket.on('audio-level', handleAudioLevel);
+    // Removed user-video-changed subscription
     socket.on('error', handleError);
 
     // Cleanup
@@ -163,12 +144,10 @@ const Room: React.FC = () => {
         socket.off('user-left', handleUserLeft);
         socket.off('chat-message', handleChatMessage);
         socket.off('user-mute-changed', handleUserMuteChanged);
-        socket.off('user-video-changed', handleUserVideoChanged);
-        socket.off('audio-level', handleAudioLevel);
         socket.off('error', handleError);
       }
     };
-  }, [socket, roomId, nickname, navigate, activeSpeaker]);
+  }, [socket, roomId, nickname, navigate]);
 
   const handleLeaveRoom = () => {
     // Reset flags when manually leaving
@@ -291,7 +270,6 @@ const Room: React.FC = () => {
           <VideoGrid 
             participants={participants}
             currentUser={currentUser}
-            activeSpeaker={activeSpeaker}
             localStream={localStream}
             remoteStreams={remoteStreams}
           />
@@ -306,6 +284,56 @@ const Room: React.FC = () => {
               onSendMessage={(message) => {
                 if (socket) {
                   socket.emit('chat-message', { message });
+                }
+              }}
+              onSendFile={async (file: File) => {
+                if (!socket || !roomId) return;
+                try {
+                  const startResp = await new Promise<{ ok: boolean; uploadId?: string; error?: string }>((resolve) => {
+                    socket.emit('file-upload-start', {
+                      roomId,
+                      originalName: file.name,
+                      mimeType: file.type,
+                      size: file.size
+                    }, (resp: { ok: boolean; uploadId?: string; error?: string }) => resolve(resp));
+                  });
+                  if (!startResp.ok || !startResp.uploadId) {
+                    toast.error(startResp.error || 'Upload init failed');
+                    return;
+                  }
+
+                  const uploadId = startResp.uploadId;
+                  const chunkSize = 64 * 1024; // 64KB
+                  let offset = 0;
+
+                  while (offset < file.size) {
+                    const nextOffset = Math.min(offset + chunkSize, file.size);
+                    const blob = file.slice(offset, nextOffset);
+                    const arrayBuffer = await blob.arrayBuffer();
+                    const chunk = new Uint8Array(arrayBuffer);
+
+                    const chunkResp = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
+                      socket.emit('file-upload-chunk', { uploadId, chunk }, (resp: { ok: boolean; error?: string }) => resolve(resp));
+                    });
+                    if (!chunkResp.ok) {
+                      toast.error(chunkResp.error || 'Chunk upload failed');
+                      return;
+                    }
+                    offset = nextOffset;
+                  }
+
+                  const completeResp = await new Promise<{ ok: boolean; file?: ChatFile; error?: string }>((resolve) => {
+                    socket.emit('file-upload-complete', { uploadId }, (resp: { ok: boolean; file?: ChatFile; error?: string }) => resolve(resp));
+                  });
+                  if (!completeResp.ok || !completeResp.file) {
+                    toast.error(completeResp.error || 'Upload failed');
+                    return;
+                  }
+
+                  socket.emit('chat-message', { message: '', file: completeResp.file });
+                } catch (e) {
+                  console.error(e);
+                  toast.error('Upload failed');
                 }
               }}
               onClose={() => setIsChatOpen(false)}

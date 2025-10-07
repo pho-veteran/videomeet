@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mic, MicOff, MessageCircle, PhoneOff, Video, VideoOff } from 'lucide-react';
+import { Mic, MicOff, MessageCircle, PhoneOff } from 'lucide-react';
 
 interface VideoControlsProps {
   onLeave: () => void;
@@ -8,7 +8,6 @@ interface VideoControlsProps {
   isChatOpen: boolean;
   currentUser?: {
     isMuted: boolean;
-    isVideoEnabled?: boolean;
   } | null;
 }
 
@@ -20,13 +19,13 @@ const VideoControls: React.FC<VideoControlsProps> = ({
   currentUser
 }) => {
   const [isMuted, setIsMuted] = useState(false);
-  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+  // Removed video toggle
 
   // Sync with current user state
   useEffect(() => {
     if (currentUser) {
       setIsMuted(currentUser.isMuted);
-      setIsVideoEnabled(currentUser.isVideoEnabled ?? true);
+      // no-op for video state
     }
   }, [currentUser]);
 
@@ -36,11 +35,7 @@ const VideoControls: React.FC<VideoControlsProps> = ({
     onToggleMute(newMutedState);
   };
 
-  const handleToggleVideo = () => {
-    // This would need to be implemented in the parent component
-    // For now, just toggle the local state
-    setIsVideoEnabled(!isVideoEnabled);
-  };
+  // Removed handleToggleVideo
 
   return (
     <div className="bg-gray-900/95 backdrop-blur-sm border-t border-gray-700/50 px-4 sm:px-6 py-4">
@@ -65,25 +60,7 @@ const VideoControls: React.FC<VideoControlsProps> = ({
           )}
         </button>
 
-        {/* Video Toggle Button */}
-        <button
-          onClick={handleToggleVideo}
-          className={`group relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 ${
-            !isVideoEnabled 
-              ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-600/25' 
-              : 'bg-white hover:bg-gray-100 text-gray-900 shadow-lg'
-          }`}
-          title={isVideoEnabled ? 'Turn off camera' : 'Turn on camera'}
-        >
-          {isVideoEnabled ? (
-            <Video className="w-6 h-6 sm:w-7 sm:h-7" />
-          ) : (
-            <VideoOff className="w-6 h-6 sm:w-7 sm:h-7" />
-          )}
-          {!isVideoEnabled && (
-            <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-gray-900"></div>
-          )}
-        </button>
+        {/* Removed Video Toggle Button */}
 
         {/* Chat Toggle Button */}
         <button

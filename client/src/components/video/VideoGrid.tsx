@@ -6,7 +6,6 @@ import type { User } from '../../types';
 interface VideoGridProps {
   participants: User[];
   currentUser: User | null;
-  activeSpeaker: string | null;
   localStream: MediaStream | null;
   remoteStreams: Map<string, MediaStream>;
 }
@@ -14,7 +13,6 @@ interface VideoGridProps {
 const VideoGrid: React.FC<VideoGridProps> = ({ 
   participants, 
   currentUser, 
-  activeSpeaker, 
   localStream, 
   remoteStreams
 }) => {
@@ -68,7 +66,7 @@ const VideoGrid: React.FC<VideoGridProps> = ({
               <div key={participant.socketId} className="aspect-video min-h-[140px] w-full">
                 <VideoTile
                   participant={participant}
-                  isActiveSpeaker={activeSpeaker === participant.socketId}
+                  isActiveSpeaker={false}
                   isCurrentUser={isCurrentUser}
                   stream={stream}
                 />
@@ -91,7 +89,7 @@ const VideoGrid: React.FC<VideoGridProps> = ({
             <div key={participant.socketId} className={`${getVideoSize(participantCount)} w-full`}>
               <VideoTile
                 participant={participant}
-                isActiveSpeaker={activeSpeaker === participant.socketId}
+                isActiveSpeaker={false}
                 isCurrentUser={isCurrentUser}
                 stream={stream}
               />

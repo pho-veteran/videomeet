@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useSocket } from '../contexts/SocketContext';
+import { useSocket } from '../contexts/useSocket';
 import type { User, SimplePeerInstance, SimplePeerSignal } from '../types';
 
 interface UseWebRTCOptions {
@@ -17,6 +17,28 @@ export const useWebRTC = ({ roomId, currentUser, participants }: UseWebRTCOption
 
   const peersRef = useRef<Map<string, SimplePeerInstance>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
+
+  // Helper to enable/disable specific track types on the current local stream
+  const setTracksEnabled = useCallback((kind: 'audio' | 'video', enabled: boolean) => {
+    if (!localStreamRef.current) return;
+    const tracks = kind === 'audio'
+      ? localStreamRef.current.getAudioTracks()
+      : localStreamRef.current.getVideoTracks();
+    tracks.forEach(track => {
+      track.enabled = enabled;
+    });
+
+    // Update state with a shallow-cloned stream to trigger re-render
+    setLocalStream(prev => {
+      if (!prev) return prev;
+      const newStream = prev.clone();
+      const newTracks = kind === 'audio' ? newStream.getAudioTracks() : newStream.getVideoTracks();
+      newTracks.forEach(track => {
+        track.enabled = enabled;
+      });
+      return newStream;
+    });
+  }, []);
 
   // Check media device permissions
   const checkPermissions = useCallback(async () => {
@@ -56,18 +78,19 @@ export const useWebRTC = ({ roomId, currentUser, participants }: UseWebRTCOption
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        const constraints: MediaStreamConstraints = {
           video: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            frameRate: { ideal: 30 }
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 60 }
           },
           audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
           }
-        });
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
         clearTimeout(timeoutId);
         setLocalStream(stream);
@@ -79,12 +102,13 @@ export const useWebRTC = ({ roomId, currentUser, participants }: UseWebRTCOption
       }
     } catch (err: unknown) {
       console.error('Error accessing media devices:', err);
-      
+
       let errorMessage = 'Failed to access camera and microphone.';
-      
-      // Type guard for DOMException
+      const isTimeout = err instanceof DOMException && (err.name === 'AbortError' || err.message.includes('Timeout'))
+        || (err instanceof Error && (err.name === 'AbortError' || err.message.includes('Timeout')));
+
       if (err instanceof DOMException) {
-        if (err.name === 'AbortError' || err.message.includes('Timeout')) {
+        if (isTimeout) {
           errorMessage = 'Camera/microphone access timed out. Please check if another application is using your camera.';
         } else if (err.name === 'NotAllowedError') {
           errorMessage = 'Camera and microphone access denied. Please allow permissions and refresh the page.';
@@ -94,26 +118,19 @@ export const useWebRTC = ({ roomId, currentUser, participants }: UseWebRTCOption
           errorMessage = 'Camera or microphone is already in use by another application.';
         } else if (err.name === 'OverconstrainedError') {
           errorMessage = 'Camera settings are not supported. Trying with basic settings...';
-          // Retry with basic constraints
           if (retryCount < 2) {
             setTimeout(() => initializeLocalStream(retryCount + 1), 1000);
             return;
           }
         }
-      } else if (err instanceof Error) {
-        if (err.name === 'AbortError' || err.message.includes('Timeout')) {
-          errorMessage = 'Camera/microphone access timed out. Please check if another application is using your camera.';
-        }
+      } else if (isTimeout) {
+        errorMessage = 'Camera/microphone access timed out. Please check if another application is using your camera.';
       }
 
-      // If it's a timeout error and we haven't retried too many times, try again
-      if ((err instanceof DOMException && (err.name === 'AbortError' || err.message.includes('Timeout'))) || 
-          (err instanceof Error && (err.name === 'AbortError' || err.message.includes('Timeout')))) {
-        if (retryCount < 2) {
-          console.log(`Retrying media access (attempt ${retryCount + 1}/3)...`);
-          setTimeout(() => initializeLocalStream(retryCount + 1), 2000);
-          return;
-        }
+      if (isTimeout && retryCount < 2) {
+        console.log(`Retrying media access (attempt ${retryCount + 1}/3)...`);
+        setTimeout(() => initializeLocalStream(retryCount + 1), 2000);
+        return;
       }
 
       setError(errorMessage);
@@ -129,9 +146,9 @@ export const useWebRTC = ({ roomId, currentUser, participants }: UseWebRTCOption
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
         }
       });
 
@@ -157,34 +174,39 @@ export const useWebRTC = ({ roomId, currentUser, participants }: UseWebRTCOption
       stream: localStreamRef.current
     });
 
-    peer.on('signal', (data: unknown) => {
-      if (isInitiator) {
-        socket.emit('offer', { roomId, offer: data as SimplePeerSignal, to: socketId });
-      } else {
-        socket.emit('answer', { roomId, answer: data as SimplePeerSignal, to: socketId });
-      }
-    });
-
-    peer.on('stream', (stream: unknown) => {
-      setRemoteStreams(prev => new Map(prev.set(socketId, stream as MediaStream)));
-    });
-
-    peer.on('connect', () => {
-      console.log(`Connected to peer: ${socketId}`);
-    });
-
-    peer.on('error', (err: unknown) => {
-      console.error('Peer connection error:', err as Error);
-    });
-
-    peer.on('close', () => {
-      console.log(`Peer connection closed: ${socketId}`);
-      setRemoteStreams(prev => {
-        const newMap = new Map(prev);
-        newMap.delete(socketId);
-        return newMap;
+    const registerPeerEvents = (p: SimplePeerInstance) => {
+      p.on('signal', (data: unknown) => {
+        if (!socket) return;
+        if (isInitiator) {
+          socket.emit('offer', { roomId, offer: data as SimplePeerSignal, to: socketId });
+        } else {
+          socket.emit('answer', { roomId, answer: data as SimplePeerSignal, to: socketId });
+        }
       });
-    });
+
+      p.on('stream', (stream: unknown) => {
+        setRemoteStreams(prev => new Map(prev.set(socketId, stream as MediaStream)));
+      });
+
+      p.on('connect', () => {
+        console.log(`Connected to peer: ${socketId}`);
+      });
+
+      p.on('error', (err: unknown) => {
+        console.error('Peer connection error:', err as Error);
+      });
+
+      p.on('close', () => {
+        console.log(`Peer connection closed: ${socketId}`);
+        setRemoteStreams(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(socketId);
+          return newMap;
+        });
+      });
+    };
+
+    registerPeerEvents(peer as unknown as SimplePeerInstance);
 
     peersRef.current.set(socketId, peer);
     return peer;
@@ -206,13 +228,7 @@ export const useWebRTC = ({ roomId, currentUser, participants }: UseWebRTCOption
     }
   }, []);
 
-  // Handle ICE candidates
-  const handleIceCandidate = useCallback((data: { candidate: SimplePeerSignal; from: string }) => {
-    const peer = peersRef.current.get(data.from);
-    if (peer) {
-      peer.signal(data.candidate);
-    }
-  }, []);
+  // Removed ICE candidate handling (trickle ICE disabled)
 
   // Set up socket event listeners
   useEffect(() => {
@@ -220,14 +236,12 @@ export const useWebRTC = ({ roomId, currentUser, participants }: UseWebRTCOption
 
     socket.on('offer', handleOffer);
     socket.on('answer', handleAnswer);
-    socket.on('ice-candidate', handleIceCandidate);
 
     return () => {
       socket.off('offer', handleOffer);
       socket.off('answer', handleAnswer);
-      socket.off('ice-candidate', handleIceCandidate);
     };
-  }, [socket, handleOffer, handleAnswer, handleIceCandidate]);
+  }, [socket, handleOffer, handleAnswer]);
 
   // Initialize connections when participants change
   useEffect(() => {
@@ -261,26 +275,8 @@ export const useWebRTC = ({ roomId, currentUser, participants }: UseWebRTCOption
 
   // Toggle mute
   const toggleMute = useCallback((muted: boolean) => {
-    if (localStreamRef.current) {
-      localStreamRef.current.getAudioTracks().forEach(track => {
-        track.enabled = !muted;
-      });
-      
-      // Update local stream state to trigger re-render
-      setLocalStream(prev => {
-        if (prev) {
-          const newStream = prev.clone();
-          newStream.getAudioTracks().forEach(track => {
-            track.enabled = !muted;
-          });
-          return newStream;
-        }
-        return prev;
-      });
-    }
-  }, []);
-
-
+    setTracksEnabled('audio', !muted);
+  }, [setTracksEnabled]);
 
   // Cleanup on unmount
   useEffect(() => {
