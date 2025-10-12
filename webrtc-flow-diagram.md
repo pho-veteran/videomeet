@@ -48,11 +48,10 @@ sequenceDiagram
 
 ### How this flow works in the app
 
-1. **Join room (signaling)**: Both browsers connect to the Socket.io server and emit `join-room`. The server replies with current participants and host info.
+1. **Join room**: Both browsers connect to the Socket.io server and emit `join-room`. The server replies with current participants and host info.
 2. **Choose initiator**: The client with the lower `socketId` acts as initiator to avoid glare (both offering at once).
-3. **Offer/Answer exchange**: The initiator’s `SimplePeer` produces an SDP offer (includes codecs, tracks, and—because `trickle: false`—candidates). The responder applies the offer, generates an SDP answer, and sends it back.
-4. **ICE**: Trickle ICE is disabled, so candidates are bundled inside the SDP; no separate candidate events are exchanged.
-5. **P2P media**: After both sides set remote/local descriptions, the browsers establish a direct peer-to-peer connection and stream media directly.
+3. **Offer/Answer exchange**: The initiator creates an SDP offer and sends it to the responder via the signaling server. The responder generates an SDP answer and sends it back.
+4. **P2P connection**: After the offer/answer exchange, the browsers establish a direct peer-to-peer connection and stream media directly.
 
 ---
 
@@ -110,26 +109,3 @@ sequenceDiagram
 
 - **WebRTC**: The actual audio/video streams between browsers after handshake (implemented in `client/src/hooks/useWebRTC.ts` and rendered by `VideoGrid`/`VideoTile`).
 - **WebSocket (Socket.io)**: Signaling (`join-room`, `offer`, `answer`), app events (`chat-message`, `user-mute-changed`), and file uploads (`file-upload-start`, `file-upload-chunk`, `file-upload-complete`).
-
----
-
-## Chat and File Transfer — WebSocket Upload Details
-
-This section details the WebSocket-based file upload used by the app:
-
-- Client-side
-  - 1) User selects a file in the UI.
-  - 2) Client emits `file-upload-start` and receives `uploadId`.
-  - 3) Client slices the file and sends chunks via `file-upload-chunk { uploadId, chunk }` until complete.
-  - 4) Client emits `file-upload-complete` and receives `file` metadata, then emits `chat-message { file }`.
-
-- Server-side
-  - 5) Server streams chunks to disk per `uploadId`, enforces size limits, and finalizes on `file-upload-complete`.
-  - 6) Server returns file metadata (id, url/path, originalName, mimeType, size, uploadedAt).
-  - 7) Upon client `chat-message { file }`, server broadcasts the message to the room.
-
-- Other clients
-  - 8) Peers receive the `chat-message` event and render the file message immediately.
-  - 9) When a user clicks the file, the client downloads it either:
-    - directly from the server path (if files are exposed statically), or
-    - via a separate WebSocket download flow (server emits/sends file content back over Socket.io).
