@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Mic, MicOff, MessageCircle, PhoneOff } from 'lucide-react';
+import { Mic, MicOff, MessageCircle, PhoneOff, Hand, Users } from 'lucide-react';
 
 interface VideoControlsProps {
   onLeave: () => void;
   onToggleMute: (isMuted: boolean) => void;
   onToggleChat: () => void;
+  onToggleRaiseHand: (isHandRaised: boolean) => void;
+  onToggleParticipants: () => void;
   isChatOpen: boolean;
+  isParticipantsOpen: boolean;
   currentUser?: {
     isMuted: boolean;
+    isHandRaised: boolean;
   } | null;
 }
 
@@ -15,16 +19,21 @@ const VideoControls: React.FC<VideoControlsProps> = ({
   onLeave,
   onToggleMute,
   onToggleChat,
+  onToggleRaiseHand,
+  onToggleParticipants,
   isChatOpen,
+  isParticipantsOpen,
   currentUser
 }) => {
   const [isMuted, setIsMuted] = useState(false);
+  const [isHandRaised, setIsHandRaised] = useState(false);
   // Removed video toggle
 
   // Sync with current user state
   useEffect(() => {
     if (currentUser) {
       setIsMuted(currentUser.isMuted);
+      setIsHandRaised(currentUser.isHandRaised);
       // no-op for video state
     }
   }, [currentUser]);
@@ -33,6 +42,12 @@ const VideoControls: React.FC<VideoControlsProps> = ({
     const newMutedState = !isMuted;
     setIsMuted(newMutedState);
     onToggleMute(newMutedState);
+  };
+
+  const handleToggleRaiseHand = () => {
+    const newHandRaisedState = !isHandRaised;
+    setIsHandRaised(newHandRaisedState);
+    onToggleRaiseHand(newHandRaisedState);
   };
 
   // Removed handleToggleVideo
@@ -62,6 +77,22 @@ const VideoControls: React.FC<VideoControlsProps> = ({
 
         {/* Removed Video Toggle Button */}
 
+        {/* Raise Hand Button */}
+        <button
+          onClick={handleToggleRaiseHand}
+          className={`group relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 ${
+            isHandRaised 
+              ? 'bg-yellow-600 hover:bg-yellow-700 text-white shadow-lg shadow-yellow-600/25' 
+              : 'bg-gray-700 hover:bg-gray-600 text-white shadow-lg'
+          }`}
+          title={isHandRaised ? 'Lower hand' : 'Raise hand'}
+        >
+          <Hand className="w-6 h-6 sm:w-7 sm:h-7" />
+          {isHandRaised && (
+            <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-500 rounded-full border-2 border-gray-900 animate-pulse"></div>
+          )}
+        </button>
+
         {/* Chat Toggle Button */}
         <button
           onClick={onToggleChat}
@@ -75,6 +106,22 @@ const VideoControls: React.FC<VideoControlsProps> = ({
           <MessageCircle className="w-6 h-6 sm:w-7 sm:h-7" />
           {isChatOpen && (
             <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-gray-900"></div>
+          )}
+        </button>
+
+        {/* Participants Toggle Button */}
+        <button
+          onClick={onToggleParticipants}
+          className={`group relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 ${
+            isParticipantsOpen 
+              ? 'bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/25' 
+              : 'bg-gray-700 hover:bg-gray-600 text-white shadow-lg'
+          }`}
+          title={isParticipantsOpen ? 'Close participants' : 'Open participants'}
+        >
+          <Users className="w-6 h-6 sm:w-7 sm:h-7" />
+          {isParticipantsOpen && (
+            <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-gray-900"></div>
           )}
         </button>
 

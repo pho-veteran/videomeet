@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Mic, MicOff, VideoOff, Loader2 } from 'lucide-react';
+import { Mic, MicOff, VideoOff, Loader2, Hand } from 'lucide-react';
 import type { User } from '../../types';
 
 interface VideoTileProps {
@@ -110,6 +110,13 @@ const VideoTile: React.FC<VideoTileProps> = ({ participant, isActiveSpeaker, isC
             {!participant.isVideoEnabled && (
               <div className="bg-gray-600/80 rounded-full p-1.5 shadow-lg">
                 <VideoOff className="w-3 h-3 text-white" />
+              </div>
+            )}
+            
+            {/* Hand Raised Indicator */}
+            {participant.isHandRaised && (
+              <div className="bg-yellow-500/90 rounded-full p-1.5 shadow-lg animate-pulse">
+                <Hand className="w-3 h-3 text-white" />
               </div>
             )}
           </div>

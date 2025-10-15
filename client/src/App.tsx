@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { SocketProvider } from './contexts/SocketContext';
+import { SocketProvider } from './contexts/SocketContext.tsx';
 import Home from './pages/Home';
 import Room from './pages/Room';
 import NotFound from './pages/NotFound';

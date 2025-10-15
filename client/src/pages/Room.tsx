@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
-import { Users, Crown, MessageCircle, AlertCircle, RefreshCw, Mic } from 'lucide-react';
+import { Users, Crown, MessageCircle, AlertCircle, RefreshCw, Mic, Hand } from 'lucide-react';
 import { useSocket } from '../contexts/useSocket';
 import { useWebRTC } from '../hooks/useWebRTC';
 import VideoGrid from '../components/video/VideoGrid';
 import VideoControls from '../components/video/VideoControls';
 import ChatPanel from '../components/chat/ChatPanel';
+import ParticipantsList from '../components/participants/ParticipantsList';
 import type { User, ChatMessage, ChatFile } from '../types';
 import toast from 'react-hot-toast';
 
@@ -20,6 +21,7 @@ const Room: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isHost, setIsHost] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
   const hasShownJoinToastRef = useRef(false);
   const hasInitializedRef = useRef(false);
 
@@ -76,6 +78,7 @@ const Room: React.FC = () => {
         nickname: nickname || '',
         isMuted: false,
         isVideoEnabled: true,
+        isHandRaised: false,
         joinedAt: new Date()
       });
       
@@ -118,6 +121,24 @@ const Room: React.FC = () => {
       );
     };
 
+    const handleUserHandRaised = (data: { socketId: string; isHandRaised: boolean; nickname: string }) => {
+      setParticipants(prev => 
+        prev.map(p => 
+          p.socketId === data.socketId 
+            ? { ...p, isHandRaised: data.isHandRaised }
+            : p
+        )
+      );
+      
+      // Show toast notification
+      if (data.isHandRaised) {
+        toast(`${data.nickname} raised their hand`, {
+          icon: '✋',
+          duration: 3000,
+        });
+      }
+    };
+
     // Removed video-changed handler
 
     const handleError = (data: { message: string }) => {
@@ -133,6 +154,7 @@ const Room: React.FC = () => {
     socket.on('user-left', handleUserLeft);
     socket.on('chat-message', handleChatMessage);
     socket.on('user-mute-changed', handleUserMuteChanged);
+    socket.on('user-hand-raised', handleUserHandRaised);
     // Removed user-video-changed subscription
     socket.on('error', handleError);
 
@@ -144,6 +166,7 @@ const Room: React.FC = () => {
         socket.off('user-left', handleUserLeft);
         socket.off('chat-message', handleChatMessage);
         socket.off('user-mute-changed', handleUserMuteChanged);
+        socket.off('user-hand-raised', handleUserHandRaised);
         socket.off('error', handleError);
       }
     };
@@ -235,15 +258,28 @@ const Room: React.FC = () => {
             </div>
             <h1 className="text-white font-semibold text-lg">Room: {roomId}</h1>
           </div>
-          <div className="flex items-center space-x-2 bg-gray-700/50 rounded-full px-3 py-1">
+          <button
+            onClick={() => setIsParticipantsOpen(!isParticipantsOpen)}
+            className="flex items-center space-x-2 bg-gray-700/50 hover:bg-gray-600/50 rounded-full px-3 py-1 transition-colors cursor-pointer"
+          >
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
             <span className="text-sm text-gray-300">
               {participants.length} participant{participants.length !== 1 ? 's' : ''}
             </span>
-          </div>
+          </button>
         </div>
         
         <div className="flex items-center space-x-2">
+          {/* Raised Hands Indicator */}
+          {participants.filter(p => p.isHandRaised).length > 0 && (
+            <div className="flex items-center space-x-1 bg-yellow-500/20 text-yellow-300 px-3 py-1 rounded-full border border-yellow-500/30">
+              <Hand className="w-3 h-3" />
+              <span className="text-xs font-medium">
+                {participants.filter(p => p.isHandRaised).length} hand{participants.filter(p => p.isHandRaised).length !== 1 ? 's' : ''} raised
+              </span>
+            </div>
+          )}
+          
           {isHost && (
             <div className="flex items-center space-x-1 bg-gradient-to-r from-yellow-500 to-orange-500 text-white px-3 py-1 rounded-full">
               <Crown className="w-3 h-3" />
@@ -266,7 +302,13 @@ const Room: React.FC = () => {
       {/* Main Content */}
       <div className="flex-1 flex relative overflow-hidden">
         {/* Video Grid */}
-        <div className={`flex-1 transition-all duration-300 ${isChatOpen ? 'mr-0 sm:mr-80' : ''} overflow-hidden`}>
+        <div className={`flex-1 transition-all duration-300 ${
+          isChatOpen && isParticipantsOpen 
+            ? 'mr-0 sm:mr-160' 
+            : isChatOpen || isParticipantsOpen 
+              ? 'mr-0 sm:mr-80' 
+              : ''
+        } overflow-hidden`}>
           <VideoGrid 
             participants={participants}
             currentUser={currentUser}
@@ -277,7 +319,9 @@ const Room: React.FC = () => {
 
         {/* Chat Panel */}
         {isChatOpen && (
-          <div className="absolute right-0 top-0 bottom-0 w-full sm:w-80 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 z-10 shadow-xl">
+          <div className={`absolute top-0 bottom-0 w-full sm:w-80 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 z-20 shadow-xl ${
+            isParticipantsOpen ? 'right-0 sm:right-80' : 'right-0'
+          }`}>
             <ChatPanel 
               messages={messages}
               participants={participants}
@@ -340,6 +384,20 @@ const Room: React.FC = () => {
             />
           </div>
         )}
+
+        {/* Participants Panel */}
+        {isParticipantsOpen && (
+          <div className={`absolute top-0 bottom-0 w-full sm:w-80 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 z-10 shadow-xl ${
+            isChatOpen ? 'right-0 sm:right-80' : 'right-0'
+          }`}>
+            <ParticipantsList 
+              participants={participants}
+              currentUser={currentUser}
+              isHost={isHost}
+              onClose={() => setIsParticipantsOpen(false)}
+            />
+          </div>
+        )}
       </div>
 
       {/* Video Controls */}
@@ -351,8 +409,15 @@ const Room: React.FC = () => {
               socket.emit('toggle-mute', { isMuted });
             }
           }}
+          onToggleRaiseHand={(isHandRaised) => {
+            if (socket) {
+              socket.emit('toggle-raise-hand', { isHandRaised });
+            }
+          }}
           onToggleChat={() => setIsChatOpen(!isChatOpen)}
+          onToggleParticipants={() => setIsParticipantsOpen(!isParticipantsOpen)}
           isChatOpen={isChatOpen}
+          isParticipantsOpen={isParticipantsOpen}
           currentUser={currentUser}
         />
     </div>

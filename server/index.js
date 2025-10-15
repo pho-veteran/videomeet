@@ -188,6 +188,7 @@ io.on('connection', (socket) => {
       nickname,
       isMuted: false,
       isVideoEnabled: true,
+      isHandRaised: false,
       joinedAt: new Date()
     };
 
@@ -381,6 +382,19 @@ io.on('connection', (socket) => {
       socket.to(socket.roomId).emit('user-mute-changed', {
         socketId: socket.id,
         isMuted: data.isMuted
+      });
+    }
+  });
+
+  // Raise hand controls
+  socket.on('toggle-raise-hand', (data) => {
+    const room = rooms.get(socket.roomId);
+    if (room && room.participants.has(socket.id)) {
+      room.participants.get(socket.id).isHandRaised = data.isHandRaised;
+      socket.to(socket.roomId).emit('user-hand-raised', {
+        socketId: socket.id,
+        isHandRaised: data.isHandRaised,
+        nickname: socket.nickname
       });
     }
   });

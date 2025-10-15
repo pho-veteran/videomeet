@@ -3,6 +3,7 @@ export interface User {
   nickname: string;
   isMuted: boolean;
   isVideoEnabled: boolean;
+  isHandRaised: boolean;
   joinedAt: Date;
 }
 
@@ -85,6 +86,7 @@ export interface ClientToServerEvents {
   'answer': (data: WebRTCAnswerData) => void;
   'chat-message': (data: { message: string; file?: ChatFile | null }) => void;
   'toggle-mute': (data: { isMuted: boolean }) => void;
+  'toggle-raise-hand': (data: { isHandRaised: boolean }) => void;
 }
 
 export interface ServerToClientEvents {
@@ -95,6 +97,7 @@ export interface ServerToClientEvents {
   'answer': (data: { answer: SimplePeerSignal; from: string }) => void;
   'chat-message': (data: ChatMessage) => void;
   'user-mute-changed': (data: { socketId: string; isMuted: boolean }) => void;
+  'user-hand-raised': (data: { socketId: string; isHandRaised: boolean; nickname: string }) => void;
   'error': (data: { message: string }) => void;
 }
 
