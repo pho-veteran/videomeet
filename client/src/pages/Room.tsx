@@ -25,6 +25,7 @@ const Room: React.FC = () => {
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const hasShownJoinToastRef = useRef(false);
   const hasInitializedRef = useRef(false);
+  const previousScreenSharerRef = useRef<string | null>(null);
 
   const nickname = searchParams.get('nickname');
 
@@ -32,12 +33,17 @@ const Room: React.FC = () => {
   const { 
     localStream, 
     remoteStreams, 
+    screenShareStream,
+    remoteScreenShares,
+    currentScreenSharer,
     isLoading: webrtcLoading, 
     error: webrtcError,
     initializeLocalStream,
     initializeAudioOnlyStream,
     toggleMute,
-    toggleVideo
+    toggleVideo,
+    startScreenShare,
+    stopScreenShare
   } = useWebRTC({ roomId: roomId || '', currentUser, participants });
 
 
@@ -51,6 +57,56 @@ const Room: React.FC = () => {
       setCurrentUser(prev => prev ? { ...prev, isVideoEnabled: enabled } : null);
     }
   };
+
+  // Handle screen share start
+  const handleStartScreenShare = async () => {
+    try {
+      await startScreenShare();
+      // Update current user state
+      if (currentUser) {
+        setCurrentUser(prev => prev ? { ...prev, isScreenSharing: true } : null);
+      }
+      toast.success('Screen sharing started');
+    } catch (error) {
+      console.error('Failed to start screen sharing:', error);
+      toast.error('Failed to start screen sharing');
+    }
+  };
+
+  // Handle screen share stop
+  const handleStopScreenShare = () => {
+    stopScreenShare();
+    // Update current user state
+    if (currentUser) {
+      setCurrentUser(prev => prev ? { ...prev, isScreenSharing: false } : null);
+    }
+    toast.success('Screen sharing stopped');
+  };
+
+  // Track screen sharer changes and show notifications
+  useEffect(() => {
+    const previousSharer = previousScreenSharerRef.current;
+    const currentSharer = currentScreenSharer;
+    
+    if (previousSharer !== currentSharer) {
+      if (currentSharer === null && previousSharer !== null) {
+        // Screen sharing stopped
+        const previousSharerName = participants.find(p => p.socketId === previousSharer)?.nickname || 'Someone';
+        toast(`${previousSharerName} stopped screen sharing`);
+      } else if (currentSharer !== null && previousSharer !== currentSharer) {
+        // Screen sharing started or changed
+        const currentSharerName = participants.find(p => p.socketId === currentSharer)?.nickname || 'Someone';
+        if (previousSharer === null) {
+          toast(`${currentSharerName} started screen sharing`);
+        } else {
+          const previousSharerName = participants.find(p => p.socketId === previousSharer)?.nickname || 'Someone';
+          toast(`${currentSharerName} replaced ${previousSharerName}'s screen share`);
+        }
+      }
+      
+      previousScreenSharerRef.current = currentSharer;
+    }
+  }, [currentScreenSharer, participants]);
 
   // Initialize room and media
   useEffect(() => {
@@ -328,6 +384,9 @@ const Room: React.FC = () => {
             currentUser={currentUser}
             localStream={localStream}
             remoteStreams={remoteStreams}
+            screenShareStream={screenShareStream}
+            remoteScreenShares={remoteScreenShares}
+            currentScreenSharer={currentScreenSharer}
           />
         </div>
 
@@ -429,11 +488,15 @@ const Room: React.FC = () => {
               socket.emit('toggle-raise-hand', { isHandRaised });
             }
           }}
+          onStartScreenShare={handleStartScreenShare}
+          onStopScreenShare={handleStopScreenShare}
           onToggleChat={() => setIsChatOpen(!isChatOpen)}
           onToggleParticipants={() => setIsParticipantsOpen(!isParticipantsOpen)}
           isChatOpen={isChatOpen}
           isParticipantsOpen={isParticipantsOpen}
           currentUser={currentUser}
+          currentScreenSharer={currentScreenSharer}
+          participants={participants}
         />
     </div>
   );

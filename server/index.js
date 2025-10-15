@@ -232,6 +232,35 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Screen share signaling
+  socket.on('screen-share-offer', (data) => {
+    socket.to(data.roomId).emit('screen-share-offer', {
+      offer: data.offer,
+      from: socket.id
+    });
+  });
+
+  socket.on('screen-share-answer', (data) => {
+    socket.to(data.roomId).emit('screen-share-answer', {
+      answer: data.answer,
+      from: socket.id
+    });
+  });
+
+  // Screen share start/stop notifications
+  socket.on('screen-share-start', (data) => {
+    socket.to(data.roomId).emit('screen-share-start', {
+      userId: data.userId,
+      userName: data.userName
+    });
+  });
+
+  socket.on('screen-share-stop', (data) => {
+    socket.to(data.roomId).emit('screen-share-stop', {
+      userId: data.userId
+    });
+  });
+
   // Removed 'ice-candidate' relay since trickle ICE is disabled
 
   // Chat messages

@@ -1,9 +1,11 @@
 # Videomeet (WebRTC + Socket.io)
 
-A minimal video meeting app with:
+A comprehensive video meeting app with advanced features:
 - WebRTC P2P audio/video between browsers
-- Socket.io signaling and chat
-- WebSocket chunked file uploads (no HTTP multipart)
+- Screen sharing with WebRTC
+- Socket.io signaling and real-time chat
+- WebSocket chunked file uploads
+- Advanced video controls and participant management
 
 ## Prerequisites
 - Node.js 18+
@@ -45,36 +47,112 @@ npm run dev
 
 4) Open the client URL in two browser windows/tabs to test.
 
-## Features (current)
-- Signaling over Socket.io: `join-room`, `offer`, `answer`
-- Chat over Socket.io: `chat-message`
-- Media controls: mute toggle
-- File sharing over WebSocket (chunked): `file-upload-start`, `file-upload-chunk`, `file-upload-complete`
-- Static file serving at `http://localhost:3001/uploads/...`
-- Trickle ICE disabled (candidates bundled in SDP)
+## Features
+
+### Core Video/Audio
+- **WebRTC P2P streaming**: Direct browser-to-browser video/audio
+- **Screen sharing**: Share screen, window, or tab with all participants
+- **Video controls**: Toggle camera on/off, mute/unmute microphone
+- **Adaptive video grid**: Smart layout that prioritizes screen sharing
+- **Participant management**: Up to 10 participants per room
+
+### Real-time Communication
+- **Socket.io signaling**: WebRTC offer/answer exchange
+- **Live chat**: Real-time text messaging with timestamps
+- **File sharing**: Upload and share files via WebSocket (chunked)
+- **Raise hand**: Visual indicator for participant interaction
+- **Notifications**: Toast notifications for all important events
+
+### User Experience
+- **Responsive design**: Works on desktop, tablet, and mobile
+- **Modern UI**: Clean, Google Meet-inspired interface
+- **Visual indicators**: Status indicators for mute, screen share, hand raised
+- **Error handling**: Comprehensive error handling with retry options
+- **Accessibility**: Keyboard navigation and screen reader support
+
+### Technical Features
+- **Trickle ICE disabled**: Candidates bundled in SDP for simplicity
+- **File upload limit**: 25MB maximum file size
+- **Static file serving**: Files served at `http://localhost:3001/uploads/...`
+- **Room persistence**: Rooms persist until all participants leave
+- **Host management**: Automatic host assignment when host leaves
 
 ## Project structure
 ```
 videomeet/
-  client/           # Vite + React (TS)
-  server/           # Express + Socket.io
-  webrtc-flow-diagram.md
+  client/                    # Vite + React (TypeScript)
+  ├── src/
+  │   ├── components/
+  │   │   ├── video/        # VideoGrid, VideoTile, VideoControls
+  │   │   ├── chat/         # ChatPanel, MessageList, ChatInput
+  │   │   └── participants/ # ParticipantsList
+  │   ├── hooks/            # useWebRTC, useSocket
+  │   ├── contexts/         # SocketContext
+  │   ├── pages/            # Home, Room, NotFound
+  │   └── types/            # TypeScript interfaces
+  server/                   # Express + Socket.io
+  ├── index.js             # Main server file
+  └── uploads/             # File upload directory
+  webrtc-flow-diagram.md   # Technical documentation
+  requirements.md          # Project requirements
 ```
 
-## Environment
-- Client reads server URL from `client/.env` → `VITE_SERVER_URL`
-- Server CORS origin reads from `server/.env` → `CLIENT_ORIGIN`
+## Environment Variables
+- **Client**: `VITE_SERVER_URL` - Server WebSocket URL
+- **Server**: `CLIENT_ORIGIN` - Allowed CORS origin
+- **Server**: `PORT` - Server port (default: 3001)
 
-## Common scripts
-- Server: `npm run dev` (nodemon) / `npm start`
-- Client: `npm run dev` (Vite) / `npm run build` / `npm run preview`
+## Common Scripts
+- **Server**: `npm run dev` (nodemon) / `npm start`
+- **Client**: `npm run dev` (Vite) / `npm run build` / `npm run preview`
 
-## Notes
-- File upload size limit: 25MB (both server multer limit and socket upload guard)
-- No separate `ice-candidate` events while trickle ICE is disabled
-- Video on/off UI is removed; only mute toggle remains
+## WebRTC Flow
+The app uses a two-phase WebRTC setup:
+1. **Regular video/audio**: Standard WebRTC peer connections for camera/microphone
+2. **Screen sharing**: Separate WebRTC peer connections for screen capture
+
+See `webrtc-flow-diagram.md` for detailed technical flow documentation.
+
+## File Upload System
+Files are uploaded via WebSocket in chunks:
+1. `file-upload-start` - Initialize upload with metadata
+2. `file-upload-chunk` - Send file data in 64KB chunks
+3. `file-upload-complete` - Finalize upload and get file URL
+4. `chat-message` - Share file with room participants
 
 ## Troubleshooting
-- Camera/mic errors: ensure no other app is using the devices and grant permissions
-- Connection issues: verify both server (3001) and client (Vite) are running and reachable
-- File uploads: large files are chunked; ensure server has write access to `server/uploads`
+
+### Media Access Issues
+- Ensure no other applications are using camera/microphone
+- Grant browser permissions when prompted
+- Try refreshing the page if permissions are denied
+- Use "Join Audio Only" option if camera access fails
+
+### Connection Issues
+- Verify both server (port 3001) and client are running
+- Check network connectivity
+- Ensure firewall allows WebSocket connections
+- Try different browsers if issues persist
+
+### File Upload Issues
+- Check file size (25MB limit)
+- Ensure server has write access to `server/uploads` directory
+- Verify network stability for large file uploads
+
+### Screen Sharing Issues
+- Ensure browser supports `getDisplayMedia()` API
+- Grant screen sharing permissions when prompted
+- Try different sharing options (entire screen, window, tab)
+- Check if another participant is already screen sharing
+
+## Browser Compatibility
+- **Chrome**: Full support (recommended)
+- **Firefox**: Full support
+- **Safari**: Full support (macOS/iOS)
+- **Edge**: Full support
+
+## Development Notes
+- Uses `simple-peer` library for WebRTC peer connections
+- Trickle ICE is disabled for simplicity
+- All media streams are encrypted by default (WebRTC standard)
+- No persistent data storage - all data is in-memory

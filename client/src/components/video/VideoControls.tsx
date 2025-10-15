@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mic, MicOff, MessageCircle, PhoneOff, Hand, Users, Video, VideoOff } from 'lucide-react';
+import { Mic, MicOff, MessageCircle, PhoneOff, Hand, Users, Video, VideoOff, Monitor, MonitorOff } from 'lucide-react';
 
 interface VideoControlsProps {
   onLeave: () => void;
@@ -8,13 +8,19 @@ interface VideoControlsProps {
   onToggleChat: () => void;
   onToggleRaiseHand: (isHandRaised: boolean) => void;
   onToggleParticipants: () => void;
+  onStartScreenShare?: () => void;
+  onStopScreenShare?: () => void;
   isChatOpen: boolean;
   isParticipantsOpen: boolean;
   currentUser?: {
+    socketId: string;
     isMuted: boolean;
     isHandRaised: boolean;
     isVideoEnabled?: boolean;
+    isScreenSharing?: boolean;
   } | null;
+  currentScreenSharer?: string | null;
+  participants?: Array<{ socketId: string; nickname: string }>;
 }
 
 const VideoControls: React.FC<VideoControlsProps> = ({
@@ -24,13 +30,18 @@ const VideoControls: React.FC<VideoControlsProps> = ({
   onToggleChat,
   onToggleRaiseHand,
   onToggleParticipants,
+  onStartScreenShare,
+  onStopScreenShare,
   isChatOpen,
   isParticipantsOpen,
-  currentUser
+  currentUser,
+  currentScreenSharer,
+  participants = []
 }) => {
   const [isMuted, setIsMuted] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
 
   // Sync with current user state
   useEffect(() => {
@@ -39,6 +50,9 @@ const VideoControls: React.FC<VideoControlsProps> = ({
       setIsHandRaised(currentUser.isHandRaised);
       if (currentUser.isVideoEnabled !== undefined) {
         setIsVideoEnabled(currentUser.isVideoEnabled);
+      }
+      if (currentUser.isScreenSharing !== undefined) {
+        setIsScreenSharing(currentUser.isScreenSharing);
       }
     }
   }, [currentUser]);
@@ -62,6 +76,27 @@ const VideoControls: React.FC<VideoControlsProps> = ({
       onToggleVideo(newVideoState);
     }
   };
+
+  const handleToggleScreenShare = () => {
+    if (isScreenSharing && onStopScreenShare) {
+      onStopScreenShare();
+      setIsScreenSharing(false);
+    } else if (!isScreenSharing && onStartScreenShare) {
+      onStartScreenShare();
+      setIsScreenSharing(true);
+    }
+  };
+
+  // Check if current user is the screen sharer
+  const isCurrentUserScreenSharing = currentScreenSharer === currentUser?.socketId;
+  
+  // Check if someone else is screen sharing
+  const isSomeoneElseScreenSharing = currentScreenSharer !== null && currentScreenSharer !== currentUser?.socketId;
+  
+  // Get the name of the current screen sharer
+  const screenSharerName = currentScreenSharer 
+    ? participants.find(p => p.socketId === currentScreenSharer)?.nickname || 'Unknown'
+    : null;
 
 
   return (
@@ -105,6 +140,39 @@ const VideoControls: React.FC<VideoControlsProps> = ({
             )}
             {!isVideoEnabled && (
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-gray-900"></div>
+            )}
+          </button>
+        )}
+
+        {/* Screen Share Button */}
+        {(onStartScreenShare || onStopScreenShare) && (
+          <button
+            onClick={handleToggleScreenShare}
+            className={`group relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 ${
+              isCurrentUserScreenSharing
+                ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-600/25' 
+                : isSomeoneElseScreenSharing
+                ? 'bg-orange-600 hover:bg-orange-700 text-white shadow-lg shadow-orange-600/25'
+                : 'bg-gray-700 hover:bg-gray-600 text-white shadow-lg'
+            }`}
+            title={
+              isCurrentUserScreenSharing 
+                ? 'Stop screen sharing' 
+                : isSomeoneElseScreenSharing
+                ? `Replace ${screenSharerName}'s screen share`
+                : 'Start screen sharing'
+            }
+          >
+            {isCurrentUserScreenSharing ? (
+              <MonitorOff className="w-6 h-6 sm:w-7 sm:h-7" />
+            ) : (
+              <Monitor className="w-6 h-6 sm:w-7 sm:h-7" />
+            )}
+            {isCurrentUserScreenSharing && (
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full border-2 border-gray-900 animate-pulse"></div>
+            )}
+            {isSomeoneElseScreenSharing && (
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full border-2 border-gray-900 animate-pulse"></div>
             )}
           </button>
         )}

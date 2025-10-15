@@ -4,6 +4,7 @@ export interface User {
   isMuted: boolean;
   isVideoEnabled: boolean;
   isHandRaised: boolean;
+  isScreenSharing?: boolean;
   joinedAt: Date;
 }
 
@@ -84,6 +85,10 @@ export interface ClientToServerEvents {
   'join-room': (data: { roomId: string; nickname: string }) => void;
   'offer': (data: WebRTCOfferData) => void;
   'answer': (data: WebRTCAnswerData) => void;
+  'screen-share-offer': (data: WebRTCOfferData) => void;
+  'screen-share-answer': (data: WebRTCAnswerData) => void;
+  'screen-share-start': (data: { roomId: string; userId: string; userName: string }) => void;
+  'screen-share-stop': (data: { roomId: string; userId: string }) => void;
   'chat-message': (data: { message: string; file?: ChatFile | null }) => void;
   'toggle-mute': (data: { isMuted: boolean }) => void;
   'toggle-raise-hand': (data: { isHandRaised: boolean }) => void;
@@ -95,6 +100,10 @@ export interface ServerToClientEvents {
   'user-left': (data: { socketId: string; nickname: string }) => void;
   'offer': (data: { offer: SimplePeerSignal; from: string }) => void;
   'answer': (data: { answer: SimplePeerSignal; from: string }) => void;
+  'screen-share-offer': (data: { offer: SimplePeerSignal; from: string }) => void;
+  'screen-share-answer': (data: { answer: SimplePeerSignal; from: string }) => void;
+  'screen-share-start': (data: { userId: string; userName: string }) => void;
+  'screen-share-stop': (data: { userId: string }) => void;
   'chat-message': (data: ChatMessage) => void;
   'user-mute-changed': (data: { socketId: string; isMuted: boolean }) => void;
   'user-hand-raised': (data: { socketId: string; isHandRaised: boolean; nickname: string }) => void;
