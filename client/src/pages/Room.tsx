@@ -392,7 +392,7 @@ const Room: React.FC = () => {
 
         {/* Chat Panel */}
         {isChatOpen && (
-          <div className={`absolute top-0 bottom-0 w-full sm:w-80 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 z-20 shadow-xl ${
+          <div className={`absolute top-0 bottom-0 w-full sm:w-80 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 z-20 shadow-xl flex flex-col ${
             isParticipantsOpen ? 'right-0 sm:right-80' : 'right-0'
           }`}>
             <ChatPanel 
@@ -460,7 +460,7 @@ const Room: React.FC = () => {
 
         {/* Participants Panel */}
         {isParticipantsOpen && (
-          <div className={`absolute top-0 bottom-0 w-full sm:w-80 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 z-10 shadow-xl ${
+          <div className={`absolute top-0 bottom-0 w-full sm:w-80 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 z-10 shadow-xl flex flex-col ${
             isChatOpen ? 'right-0 sm:right-80' : 'right-0'
           }`}>
             <ParticipantsList 

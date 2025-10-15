@@ -21,10 +21,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, participants, onSendMes
   };
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-800">
+    <div className="h-full flex flex-col bg-white dark:bg-gray-800 min-h-0">
       <ChatHeader participantCount={participants.length} onClose={onClose} />
 
-      <MessageList messages={messages} />
+      <div className="flex-1 min-h-0">
+        <MessageList messages={messages} />
+      </div>
 
       <ChatInput
         value={newMessage}

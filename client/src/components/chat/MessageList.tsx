@@ -25,9 +25,9 @@ const MessageList: React.FC<MessageListProps> = ({ messages }) => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const serverUrl = (import.meta as any).env?.VITE_SERVER_URL || import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+  const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+    <div className="h-full overflow-y-auto p-4 space-y-4">
       {messages.length === 0 ? (
         <div className="text-center text-gray-500 dark:text-gray-400 py-12">
           <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
