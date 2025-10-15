@@ -22,6 +22,7 @@ const Room: React.FC = () => {
   const [isHost, setIsHost] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const hasShownJoinToastRef = useRef(false);
   const hasInitializedRef = useRef(false);
 
@@ -35,8 +36,21 @@ const Room: React.FC = () => {
     error: webrtcError,
     initializeLocalStream,
     initializeAudioOnlyStream,
-    toggleMute
+    toggleMute,
+    toggleVideo
   } = useWebRTC({ roomId: roomId || '', currentUser, participants });
+
+
+  // Handle video toggle
+  const handleToggleVideo = (enabled: boolean) => {
+    setIsVideoEnabled(enabled);
+    toggleVideo(enabled);
+    
+    // Update current user state
+    if (currentUser) {
+      setCurrentUser(prev => prev ? { ...prev, isVideoEnabled: enabled } : null);
+    }
+  };
 
   // Initialize room and media
   useEffect(() => {
@@ -73,14 +87,14 @@ const Room: React.FC = () => {
     const handleRoomJoined = (data: { participants: User[]; isHost: boolean }) => {
       setParticipants(data.participants);
       setIsHost(data.isHost);
-      setCurrentUser({
+      setCurrentUser(prev => ({
         socketId: socket.id || '',
         nickname: nickname || '',
-        isMuted: false,
-        isVideoEnabled: true,
-        isHandRaised: false,
-        joinedAt: new Date()
-      });
+        isMuted: prev?.isMuted ?? false,
+        isVideoEnabled: prev?.isVideoEnabled ?? isVideoEnabled,
+        isHandRaised: prev?.isHandRaised ?? false,
+        joinedAt: prev?.joinedAt ?? new Date()
+      }));
       
       // Only show toast once
       if (!hasShownJoinToastRef.current) {
@@ -170,7 +184,7 @@ const Room: React.FC = () => {
         socket.off('error', handleError);
       }
     };
-  }, [socket, roomId, nickname, navigate]);
+  }, [socket, roomId, nickname, navigate, isVideoEnabled]);
 
   const handleLeaveRoom = () => {
     // Reset flags when manually leaving
@@ -409,6 +423,7 @@ const Room: React.FC = () => {
               socket.emit('toggle-mute', { isMuted });
             }
           }}
+          onToggleVideo={handleToggleVideo}
           onToggleRaiseHand={(isHandRaised) => {
             if (socket) {
               socket.emit('toggle-raise-hand', { isHandRaised });

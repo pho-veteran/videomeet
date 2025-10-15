@@ -40,6 +40,11 @@ export const useWebRTC = ({ roomId, currentUser, participants }: UseWebRTCOption
     });
   }, []);
 
+  // Toggle video on/off
+  const toggleVideo = useCallback((enabled: boolean) => {
+    setTracksEnabled('video', enabled);
+  }, [setTracksEnabled]);
+
   // Check media device permissions
   const checkPermissions = useCallback(async () => {
     try {
@@ -302,6 +307,7 @@ export const useWebRTC = ({ roomId, currentUser, participants }: UseWebRTCOption
     initializeLocalStream,
     initializeAudioOnlyStream,
     checkPermissions,
-    toggleMute
+    toggleMute,
+    toggleVideo
   };
 };

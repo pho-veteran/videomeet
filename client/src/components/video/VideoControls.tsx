@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Mic, MicOff, MessageCircle, PhoneOff, Hand, Users } from 'lucide-react';
+import { Mic, MicOff, MessageCircle, PhoneOff, Hand, Users, Video, VideoOff } from 'lucide-react';
 
 interface VideoControlsProps {
   onLeave: () => void;
   onToggleMute: (isMuted: boolean) => void;
+  onToggleVideo?: (isVideoEnabled: boolean) => void;
   onToggleChat: () => void;
   onToggleRaiseHand: (isHandRaised: boolean) => void;
   onToggleParticipants: () => void;
@@ -12,12 +13,14 @@ interface VideoControlsProps {
   currentUser?: {
     isMuted: boolean;
     isHandRaised: boolean;
+    isVideoEnabled?: boolean;
   } | null;
 }
 
 const VideoControls: React.FC<VideoControlsProps> = ({
   onLeave,
   onToggleMute,
+  onToggleVideo,
   onToggleChat,
   onToggleRaiseHand,
   onToggleParticipants,
@@ -27,14 +30,16 @@ const VideoControls: React.FC<VideoControlsProps> = ({
 }) => {
   const [isMuted, setIsMuted] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
-  // Removed video toggle
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
 
   // Sync with current user state
   useEffect(() => {
     if (currentUser) {
       setIsMuted(currentUser.isMuted);
       setIsHandRaised(currentUser.isHandRaised);
-      // no-op for video state
+      if (currentUser.isVideoEnabled !== undefined) {
+        setIsVideoEnabled(currentUser.isVideoEnabled);
+      }
     }
   }, [currentUser]);
 
@@ -50,7 +55,14 @@ const VideoControls: React.FC<VideoControlsProps> = ({
     onToggleRaiseHand(newHandRaisedState);
   };
 
-  // Removed handleToggleVideo
+  const handleToggleVideo = () => {
+    if (onToggleVideo) {
+      const newVideoState = !isVideoEnabled;
+      setIsVideoEnabled(newVideoState);
+      onToggleVideo(newVideoState);
+    }
+  };
+
 
   return (
     <div className="bg-gray-900/95 backdrop-blur-sm border-t border-gray-700/50 px-4 sm:px-6 py-4">
@@ -75,7 +87,27 @@ const VideoControls: React.FC<VideoControlsProps> = ({
           )}
         </button>
 
-        {/* Removed Video Toggle Button */}
+        {/* Video Toggle Button */}
+        {onToggleVideo && (
+          <button
+            onClick={handleToggleVideo}
+            className={`group relative w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 ${
+              isVideoEnabled 
+                ? 'bg-white hover:bg-gray-100 text-gray-900 shadow-lg' 
+                : 'bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-600/25'
+            }`}
+            title={isVideoEnabled ? 'Turn off camera' : 'Turn on camera'}
+          >
+            {isVideoEnabled ? (
+              <Video className="w-6 h-6 sm:w-7 sm:h-7" />
+            ) : (
+              <VideoOff className="w-6 h-6 sm:w-7 sm:h-7" />
+            )}
+            {!isVideoEnabled && (
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-gray-900"></div>
+            )}
+          </button>
+        )}
 
         {/* Raise Hand Button */}
         <button
